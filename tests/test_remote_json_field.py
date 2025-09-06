@@ -6,9 +6,10 @@ from unittest import mock
 
 import pytest
 
+pytestmark = pytest.mark.django_db
+
 from django_remote_json import RemoteJSONField, RemoteJSONProxy
 from .models import SampleModel
-
 
 class MemoryStorage:
     def __init__(self):

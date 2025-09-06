@@ -11,6 +11,7 @@ def pytest_configure():
                 "django.contrib.contenttypes",
                 "django.contrib.auth",
                 "django_remote_json",
+                "tests",  # include test models app so SampleModel is created
             ],
             DATABASES={
                 "default": {

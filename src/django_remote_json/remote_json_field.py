@@ -50,12 +50,18 @@ class RemoteJSONField(models.TextField):
         return self.upload_to(model_instance, filename)
 
     def is_file_path(self, value: str):
-        return bool(
-            re.match(
-                r"^[a-zA-Z0-9_\-\/]+\/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.?[a-f0-9-]+\.json$",
-                value,
-            )
-        )
+        """Heuristic to determine if a string is one of this field's stored file paths.
+
+        Original pattern required a directory component, but the default generator may
+        produce a bare filename. Accept either an optional directory prefix or none.
+        Pattern parts:
+          optional <dir/>
+          ISO-like timestamp (YYYY-MM-DDTHH:MM:SS[.microseconds])
+          hyphen UUID-ish suffix (we don't strictly validate uuid5 here, just hex/dashes)
+          .json extension
+        """
+        pattern = r"^(?:[\w\-./]+/)?\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?-[0-9a-fA-F-]+\.json$"
+        return bool(re.match(pattern, value))
 
     # ----------------- ORM integration -----------------
     def from_db_value(self, value, *args, **kwargs):  # type: ignore[override]
