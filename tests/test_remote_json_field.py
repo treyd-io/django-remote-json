@@ -303,3 +303,119 @@ def test_list_container_protocol_and_wrapper_caching(storage_patched):
     first = proxy.append
     second = proxy.append
     assert first is second  # cached wrapper
+
+
+# ---------------- Additional coverage tests -----------------
+
+def test_generate_file_path_contains_uuid(storage_patched):
+    obj = create()
+    field = SampleModel._meta.get_field('remote_data')  # type: ignore[assignment]
+    path = field.generate_file_path(obj)  # type: ignore[attr-defined]
+    # Expect ISO timestamp + '-' + uuid5(namespace, pk) + .json
+    import uuid as _uuid
+    expected_uuid = _uuid.uuid5(field.namespace, str(obj.pk))  # type: ignore[attr-defined]
+    assert path.endswith('.json')
+    assert str(expected_uuid) in path
+
+
+def test_raw_value_unsaved_and_saved(storage_patched):
+    obj = SampleModel()
+    field: RemoteJSONField = SampleModel._meta.get_field('remote_data')  # type: ignore[assignment]
+    assert field.raw_value(obj) is None
+    obj.save()
+    obj.remote_data = {"a": 1}
+    obj.save()
+    assert field.raw_value(obj) is not None
+
+
+def test_to_python_invalid_type():
+    field = RemoteJSONField()
+    class Foo: ...
+    with pytest.raises(ValueError):
+        field.to_python(Foo())  # type: ignore[arg-type]
+
+
+def test_get_prep_value_variants(storage_patched):
+    field = RemoteJSONField()
+    # String path passes through
+    assert field.get_prep_value('some/path.json') == 'some/path.json'
+    # None -> None
+    assert field.get_prep_value(None) is None
+    # Proxy returns its file path
+    # Provide an in-memory value so proxy does not attempt lazy load
+    p = RemoteJSONProxy(value={}, file_path='abc.json')
+    assert field.get_prep_value(p) == 'abc.json'
+    # Unsupported type
+    with pytest.raises(TypeError):
+        field.get_prep_value(123)
+
+
+def test_lazy_load_from_file_path(storage_patched):
+    storage = storage_patched
+    path = '2025-01-01T00:00:00-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.json'
+    storage.files[path] = json.dumps({'lazy': True})
+    proxy = RemoteJSONProxy(file_path=path)
+    # Not loaded yet
+    assert proxy._loaded is False
+    assert proxy.get() == {'lazy': True}
+    assert proxy._loaded is True
+
+
+def test_proxy_set_marks_dirty_and_persists(storage_patched):
+    storage = storage_patched
+    obj = create(); obj.remote_data = {"a": 1}; obj.save(); storage.save_count = 0
+    proxy = obj.remote_data
+    proxy.set({"b": 2})
+    assert proxy.needs_save
+    obj.save()
+    assert storage.save_count == 1
+    obj.refresh_from_db(); assert obj.remote_data.get() == {"b": 2}
+
+
+def test_setitem_initializes_when_none(storage_patched):
+    storage = storage_patched
+    path = '2025-01-02T00:00:00-deadbeef-dead-beef-dead-beefdeadbeef.json'
+    storage.files[path] = 'null'
+    proxy = RemoteJSONProxy(file_path=path)
+    proxy['a'] = 1
+    assert proxy.get() == {'a': 1}
+    assert proxy.needs_save
+
+
+def test_getitem_on_none_raises_keyerror(storage_patched):
+    storage = storage_patched
+    path = '2025-01-03T00:00:00-deadbeef-dead-beef-dead-beefdeadbeef.json'
+    storage.files[path] = 'null'
+    proxy = RemoteJSONProxy(file_path=path)
+    with pytest.raises(KeyError):
+        _ = proxy['missing']
+
+
+def test_unsupported_set_type_raises(storage_patched):
+    obj = create()
+    # Assigning a set should raise during serialization (not JSON serializable)
+    obj.remote_data = {1, 2}
+    with pytest.raises(TypeError):
+        obj.save()
+
+
+def test_inplace_op_fallback_path(storage_patched):
+    # For types without __iadd__ returning self (e.g., tuple) ensure fallback still works
+    obj = create(); obj.remote_data = (1, 2); obj.save(); proxy = obj.remote_data
+    proxy += (3,)  # type: ignore[operator]
+    assert proxy.needs_save
+    obj.save(); obj.refresh_from_db();
+    # JSON will deserialize tuple as list
+    assert obj.remote_data.get() == [1, 2, 3]
+
+
+def test_proxy_ne_and_repr_str():
+    p = RemoteJSONProxy([1, 2])
+    assert p != [1]
+    assert repr(p) == repr([1, 2])
+    assert str(p) == str([1, 2])
+
+
+def test_is_file_path_bare_filename():
+    field = RemoteJSONField()
+    assert field.is_file_path('2025-09-05T12:34:56-deadbeef.json')
