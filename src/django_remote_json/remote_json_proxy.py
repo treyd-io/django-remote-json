@@ -1,4 +1,5 @@
 import json
+
 from django.core.files.storage import default_storage
 
 
@@ -17,6 +18,10 @@ class RemoteJSONProxy:
         self._value = value
         self._dirty = value is not None and file_path is None
         self._mutator_cache = {}
+
+    def _file_url(self):
+        if self._file_path:
+            return default_storage.url(self._file_path)
 
     # ----- Core accessors -----
     def _lazy_load(self):
@@ -50,30 +55,38 @@ class RemoteJSONProxy:
 
     # ----- Representation & basic comparisons -----
     def __repr__(self):
-        self._lazy_load(); return repr(self._value)
+        self._lazy_load()
+        return repr(self._value)
 
     def __str__(self):
-        self._lazy_load(); return str(self._value)
+        self._lazy_load()
+        return str(self._value)
 
     def __eq__(self, other):
-        self._lazy_load(); return self._value == other
+        self._lazy_load()
+        return self._value == other
 
     def __ne__(self, other):  # explicit though Python falls back to eq
-        self._lazy_load(); return self._value != other
+        self._lazy_load()
+        return self._value != other
 
     def __bool__(self):
-        self._lazy_load(); return bool(self._value)
+        self._lazy_load()
+        return bool(self._value)
 
     # ----- Addition / concatenation (primary ergonomic need) -----
     def __add__(self, other):  # type: ignore[override]
-        self._lazy_load(); return self._value + other  # type: ignore[operator]
+        self._lazy_load()
+        return self._value + other  # type: ignore[operator]
 
     def __radd__(self, other):  # type: ignore[override]
-        self._lazy_load(); return other + self._value  # type: ignore[operator]
+        self._lazy_load()
+        return other + self._value  # type: ignore[operator]
 
     @property
     def __class__(self):  # type: ignore
-        self._lazy_load(); return self._value.__class__
+        self._lazy_load()
+        return self._value.__class__
 
     # ----- Attribute / mutator delegation -----
     def __getattr__(self, item):
@@ -86,6 +99,7 @@ class RemoteJSONProxy:
         if callable(attr) and item in MUTATING:
             if item in self._mutator_cache:
                 return self._mutator_cache[item]
+
             def wrapper(*args, **kwargs):
                 result = attr(*args, **kwargs)
                 self._dirty = True
@@ -95,7 +109,8 @@ class RemoteJSONProxy:
         return attr
 
     def __dir__(self):
-        self._lazy_load(); return dir(self._value)
+        self._lazy_load()
+        return dir(self._value)
 
     # ----- Ordering & unary ops -----
     def __lt__(self, other): self._lazy_load(); return self._value < other  # type: ignore[operator]
@@ -119,23 +134,37 @@ class RemoteJSONProxy:
 
     # Generic operator helpers for extended ops
     def _binary_op(self, other, name):
-        self._lazy_load(); method = getattr(self._value, f'__{name}__', None); return NotImplemented if method is None else method(other)
+        self._lazy_load()
+        method = getattr(self._value, f'__{name}__', None)
+        return NotImplemented if method is None else method(other)
+
     def _reflected_op(self, other, name):
-        self._lazy_load(); method = getattr(self._value, f'__r{name}__', None)
-        if method is not None: return method(other)
+        self._lazy_load()
+        method = getattr(self._value, f'__r{name}__', None)
+        if method is not None:
+            return method(other)
         if name == 'add':
-            try: return other + self._value  # type: ignore[operator]
-            except TypeError: return NotImplemented
+            try:
+                return other + self._value  # type: ignore[operator]
+            except TypeError:
+                return NotImplemented
         return NotImplemented
+
     def _inplace_op(self, other, name):
-        self._lazy_load(); imethod = getattr(self._value, f'__i{name}__', None)
+        self._lazy_load()
+        imethod = getattr(self._value, f'__i{name}__', None)
         if imethod is not None:
-            result = imethod(other); self._dirty = True
-            if result is not self._value: self._value = result
+            result = imethod(other)
+            self._dirty = True
+            if result is not self._value:
+                self._value = result
             return self
         bmethod = getattr(self._value, f'__{name}__', None)
-        if bmethod is None: return NotImplemented
-        self._value = bmethod(other); self._dirty = True; return self
+        if bmethod is None:
+            return NotImplemented
+        self._value = bmethod(other)
+        self._dirty = True
+        return self
 
 
 _BINARY_OPS = [
