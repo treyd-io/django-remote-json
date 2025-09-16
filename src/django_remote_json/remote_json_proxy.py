@@ -112,6 +112,10 @@ class RemoteJSONProxy:
         self._lazy_load()
         return dir(self._value)
 
+    def __fspath__(self):
+        self._lazy_load()
+        return self._value
+
     # ----- Ordering & unary ops -----
     def __lt__(self, other): self._lazy_load(); return self._value < other  # type: ignore[operator]
     def __le__(self, other): self._lazy_load(); return self._value <= other  # type: ignore[operator]
