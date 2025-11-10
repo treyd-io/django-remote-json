@@ -35,7 +35,6 @@ class RemoteJSONProxy:
             self._value = None
         self._loaded = True
         
-
     def get(self):
         self._lazy_load()
         return self._value
@@ -145,6 +144,32 @@ class RemoteJSONProxy:
     @property
     def needs_save(self): return self._dirty
     def mark_saved(self): self._dirty = False
+
+    # ----- Pickle / Copy support -----
+    def __getstate__(self):
+        """Support for pickle and deepcopy."""
+        return {
+            '_file_path': self._file_path,
+            '_loaded': self._loaded,
+            '_value': self._value,
+            '_dirty': self._dirty,
+        }
+
+    def __setstate__(self, state):
+        """Support for pickle and deepcopy."""
+        self._file_path = state['_file_path']
+        self._loaded = state['_loaded']
+        self._value = state['_value']
+        self._dirty = state['_dirty']
+        self._mutator_cache = {}
+
+    def __deepcopy__(self, memo):
+        """Explicit deepcopy support to avoid issues with __getattr__."""
+        from copy import deepcopy
+        return RemoteJSONProxy(
+            value=deepcopy(self._value, memo) if self._loaded else None,
+            file_path=self._file_path,  # file paths are strings, no need to deepcopy
+        )
 
     # Generic operator helpers for extended ops
     def _binary_op(self, other, name):
