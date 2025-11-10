@@ -25,10 +25,16 @@ class RemoteJSONProxy:
 
     # ----- Core accessors -----
     def _lazy_load(self):
-        if not self._loaded and self._file_path:
+        if self._loaded:
+            return
+        
+        if self._file_path:
             with default_storage.open(self._file_path) as fh:
                 self._value = json.load(fh)
-            self._loaded = True
+        else:
+            self._value = None
+        self._loaded = True
+        
 
     def get(self):
         self._lazy_load()
