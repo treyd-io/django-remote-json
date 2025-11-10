@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-remote-json"
-version = "0.1.0"
+version = "0.2.0"
 description = "Django model field storing JSON remotely with transparent lazy proxy and dirty tracking"
 readme = "README.md"
 license = {text = "MIT"}
