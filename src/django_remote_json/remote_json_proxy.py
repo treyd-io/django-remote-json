@@ -34,6 +34,10 @@ class RemoteJSONProxy:
         self._lazy_load()
         return self._value
 
+    def get(self, *args, **kwargs):
+        self._lazy_load()
+        return self._value.get(*args, **kwargs)
+
     def set(self, value):
         self._value = value
         self._loaded = True
